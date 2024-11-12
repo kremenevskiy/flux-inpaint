@@ -1,38 +1,45 @@
 import os
+import random
+from pathlib import Path
 
-import cv2
+import torch
 import uvicorn
+from controlnet_flux import FluxControlNetModel
+from diffusers.utils import check_min_version
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import FileResponse
-import torch
-from diffusers.utils import load_image, check_min_version
-from controlnet_flux import FluxControlNetModel
-from transformer_flux import FluxTransformer2DModel
-from pipeline_flux_controlnet_inpaint import FluxControlNetInpaintingPipeline
 from PIL import Image
-from pathlib import Path
-check_min_version("0.30.2")
+from pipeline_flux_controlnet_inpaint import FluxControlNetInpaintingPipeline
+from transformer_flux import FluxTransformer2DModel
+
+check_min_version('0.30.2')
 
 
-
-controlnet = FluxControlNetModel.from_pretrained("alimama-creative/FLUX.1-dev-Controlnet-Inpainting-Alpha", torch_dtype=torch.bfloat16)
+controlnet = FluxControlNetModel.from_pretrained(
+    'alimama-creative/FLUX.1-dev-Controlnet-Inpainting-Alpha', torch_dtype=torch.bfloat16
+)
 transformer = FluxTransformer2DModel.from_pretrained(
-        "black-forest-labs/FLUX.1-dev", subfolder='transformer', torch_dtype=torch.bfloat16
-    )
+    'black-forest-labs/FLUX.1-dev', subfolder='transformer', torch_dtype=torch.bfloat16
+)
 pipe = FluxControlNetInpaintingPipeline.from_pretrained(
-    "black-forest-labs/FLUX.1-dev",
+    'black-forest-labs/FLUX.1-dev',
     controlnet=controlnet,
     transformer=transformer,
-    torch_dtype=torch.bfloat16
-).to("cuda")
+    torch_dtype=torch.bfloat16,
+).to('cuda')
 pipe.transformer.to(torch.bfloat16)
 pipe.controlnet.to(torch.bfloat16)
 
 
-def create_inpaint(prompt: str, image_path: str, mask_path: str, save_path: str, seed=24) -> None:
+def create_inpaint(
+    prompt: str, image_path: str, mask_path: str, save_path: str, seed: int = 24
+) -> None:
+    if seed == 0:
+        seed = random.randint(1000)
+        print('seed: ', seed)
     image = Image.open(image_path)
     mask = Image.open(mask_path)
-    generator = torch.Generator(device="cuda").manual_seed(seed)
+    generator = torch.Generator(device='cuda').manual_seed(seed)
     result = pipe(
         prompt=prompt,
         height=image.size[1],
@@ -43,14 +50,11 @@ def create_inpaint(prompt: str, image_path: str, mask_path: str, save_path: str,
         generator=generator,
         controlnet_conditioning_scale=0.9,
         guidance_scale=3.5,
-        negative_prompt="",
-        true_guidance_scale=1.0 # default: 3.5 for alpha and 1.0 for beta
+        negative_prompt='',
+        true_guidance_scale=1.0,  # default: 3.5 for alpha and 1.0 for beta
     ).images[0]
 
     result.save(save_path)
-
-
-
 
 
 app = FastAPI()
@@ -64,19 +68,19 @@ os.makedirs(OUTPUT_PATH, exist_ok=True)
 
 
 @app.post('/process-image/')
-async def process_image(prompt: str = Form(...), image: UploadFile = File(...), image_mask: UploadFile = File(...)):
+async def process_image(
+    prompt: str = Form(...), image: UploadFile = File(...), image_mask: UploadFile = File(...)
+):
     # Ensure output directory exists
-
 
     img_path = Path(IMAGES_PATH) / image.filename
     mask_path = Path(MASKS_PATH) / image_mask.filename
     result_path = Path(OUTPUT_PATH) / image_mask.filename
-    
+
     with img_path.open('wb') as file:
-        file.write(await image.read())                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+        file.write(await image.read())
     with mask_path.open('wb') as file:
         file.write(await image_mask.read())
-
 
     create_inpaint(prompt=prompt, image_path=img_path, mask_path=mask_path, save_path=result_path)
 
