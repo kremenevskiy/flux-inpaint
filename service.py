@@ -35,7 +35,7 @@ def create_inpaint(
     prompt: str, image_path: str, mask_path: str, save_path: str, seed: int = 24
 ) -> None:
     if seed == 0:
-        seed = random.randint(1000)
+        seed = random.randint(0, 1000)
         print('seed: ', seed)
     image = Image.open(image_path)
     mask = Image.open(mask_path)
@@ -69,7 +69,10 @@ os.makedirs(OUTPUT_PATH, exist_ok=True)
 
 @app.post('/process-image/')
 async def process_image(
-    prompt: str = Form(...), image: UploadFile = File(...), image_mask: UploadFile = File(...)
+    prompt: str = Form(...),
+    image: UploadFile = File(...),
+    image_mask: UploadFile = File(...),
+    seed: int = Form(0),
 ):
     # Ensure output directory exists
 
@@ -82,7 +85,9 @@ async def process_image(
     with mask_path.open('wb') as file:
         file.write(await image_mask.read())
 
-    create_inpaint(prompt=prompt, image_path=img_path, mask_path=mask_path, save_path=result_path)
+    create_inpaint(
+        prompt=prompt, image_path=img_path, mask_path=mask_path, save_path=result_path, seed=seed
+    )
 
     # Return the processed file as a response
     return FileResponse(
